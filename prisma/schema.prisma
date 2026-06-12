@@ -1,0 +1,519 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE LAYER - RBAC & Users
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String
+  role          String    @default("sme") // sme | consultant | admin | ceo | analyst | branch_manager | investor
+  avatar        String?
+  branchId      String?   // for branch_manager
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company?
+  diagnostics   Diagnostic[]
+  reports       Report[]
+  executionTasks ExecutionTask[]
+  notifications Notification[]
+  crmLeads      CrmLead[]          @relation("LeadCreator")
+  crmFollowUps  CrmFollowUp[]      @relation("FollowUpCreator")
+  chatSessions  ChatSession[]
+  sentMessages  ChatMessage[]
+  workflowActions WorkflowAction[]
+  invoices      Invoice[]          @relation("InvoiceCreator")
+  expenses      Expense[]          @relation("ExpenseCreator")
+  revenueRecords RevenueRecord[]   @relation("RevenueCreator")
+}
+
+model Company {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  name            String
+  industry        String?
+  subIndustry     String?
+  businessModel   String?   // B2B, B2C, B2B2C, Marketplace, SaaS, etc.
+  stage           String?   // Idea, MVP, Growth, Scale, Mature
+  revenue         String?   // range
+  employees       String?   // range
+  region          String?
+  country         String?
+  foundedYear     Int?
+  website         String?
+  description     String?
+  targetCustomers String?
+  products        String?
+  branchName      String?   // for multi-branch
+  parentId        String?   // for franchise/branch hierarchy
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  diagnostics     Diagnostic[]
+  benchmarks      Benchmark[]
+  crmLeads        CrmLead[]
+  invoices        Invoice[]
+  expenses        Expense[]
+  revenueRecords  RevenueRecord[]
+  budgets         Budget[]
+}
+
+// ============================================================
+// DIAGNOSTIC LAYER
+// ============================================================
+
+model Diagnostic {
+  id              String    @id @default(cuid())
+  userId          String
+  companyId       String?
+  status          String    @default("in_progress") // in_progress | completed
+  diagnosticType  String    @default("standard")    // standard | adaptive
+  currentStep     Int       @default(0)
+  totalSteps      Int       @default(10)
+  businessModel   Float     @default(0)
+  market          Float     @default(0)
+  product         Float     @default(0)
+  customers       Float     @default(0)
+  marketing       Float     @default(0)
+  sales           Float     @default(0)
+  operations      Float     @default(0)
+  financial       Float     @default(0)
+  team            Float     @default(0)
+  growth          Float     @default(0)
+  overallScore    Float     @default(0)
+  riskScore       Float     @default(0)
+  growthPotential Float     @default(0)
+  investmentReady Float     @default(0)
+  adaptivePath    String?   // JSON string for adaptive question path
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company         Company?  @relation(fields: [companyId], references: [id])
+  answers         DiagnosticAnswer[]
+  recommendations StrategyRecommendation[]
+  roadmap         Roadmap?
+}
+
+model DiagnosticAnswer {
+  id            String    @id @default(cuid())
+  diagnosticId  String
+  dimension     String    // businessModel, market, product, customers, marketing, sales, operations, financial, team, growth
+  questionIndex Int
+  questionText  String
+  answer        Int       @default(0) // 0-5 scale
+  difficulty    String    @default("medium") // easy | medium | hard - for adaptive
+  isAdaptive    Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  diagnostic    Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// STRATEGY LAYER
+// ============================================================
+
+model StrategyRecommendation {
+  id              String    @id @default(cuid())
+  diagnosticId    String
+  strategyName    String
+  strategyDesc    String
+  category        String
+  priority        Float     // Priority = (Impact × Feasibility) / (Cost × Risk × Time)
+  impact          Float
+  feasibility     Float
+  cost            Float
+  risk            Float
+  timeToImplement String
+  rationale       String
+  status          String    @default("suggested") // suggested | accepted | rejected | in_progress | completed
+  aiAgentType     String?   // which AI agent generated this
+  createdAt       DateTime  @default(now())
+
+  diagnostic      Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+}
+
+model Roadmap {
+  id            String    @id @default(cuid())
+  diagnosticId  String    @unique
+  title         String
+  description   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  diagnostic    Diagnostic @relation(fields: [diagnosticId], references: [id], onDelete: Cascade)
+  phases        RoadmapPhase[]
+}
+
+model RoadmapPhase {
+  id          String    @id @default(cuid())
+  roadmapId   String
+  title       String
+  description String?
+  order       Int
+  duration    String    // e.g., "30 days", "90 days"
+  startDate   DateTime?
+  endDate     DateTime?
+  status      String    @default("pending") // pending | in_progress | completed
+
+  roadmap     Roadmap   @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  milestones  Milestone[]
+  tasks       ExecutionTask[]
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  phaseId     String
+  title       String
+  description String?
+  targetDate  DateTime?
+  completed   Boolean   @default(false)
+
+  phase       RoadmapPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+}
+
+model ExecutionTask {
+  id          String    @id @default(cuid())
+  phaseId     String
+  userId      String?
+  title       String
+  description String?
+  assignee    String?
+  priority    String    @default("medium") // low | medium | high | critical
+  status      String    @default("todo") // todo | in_progress | done | blocked
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  phase       RoadmapPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  user        User?        @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// CRM LAYER - Lead Management & Sales Pipeline
+// ============================================================
+
+model CrmLead {
+  id            String    @id @default(cuid())
+  companyId     String
+  creatorId     String
+  name          String
+  email         String?
+  phone         String?
+  company       String?   // lead's company name
+  industry      String?
+  source        String    @default("website") // website | referral | campaign | social | direct | phone
+  stage         String    @default("new") // new | contacted | qualified | proposal | negotiation | closed_won | closed_lost
+  value         Float     @default(0)     // potential deal value
+  probability   Float     @default(0.2)   // 0-1
+  notes         String?
+  tags          String?   // comma separated
+  nextFollowUp  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  companyRel    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator       User      @relation("LeadCreator", fields: [creatorId], references: [id])
+  followUps     CrmFollowUp[]
+  interactions  CrmInteraction[]
+}
+
+model CrmFollowUp {
+  id          String    @id @default(cuid())
+  leadId      String
+  creatorId   String
+  type        String    @default("call") // call | email | meeting | note
+  subject     String
+  notes       String?
+  dueDate     DateTime
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  lead        CrmLead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  creator     User      @relation("FollowUpCreator", fields: [creatorId], references: [id])
+}
+
+model CrmInteraction {
+  id          String    @id @default(cuid())
+  leadId      String
+  type        String    // call | email | meeting | sms | whatsapp
+  direction   String    @default("outbound") // inbound | outbound
+  subject     String?
+  content     String?
+  duration    Int?      // in seconds for calls
+  createdAt   DateTime  @default(now())
+
+  lead        CrmLead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// BPM LAYER - Workflow Engine
+// ============================================================
+
+model Workflow {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        String    @default("approval") // approval | review | escalation | notification
+  status      String    @default("active") // active | paused | archived
+  steps       String    // JSON array of workflow steps
+  triggerType String    @default("manual") // manual | on_event | scheduled
+  triggerConfig String? // JSON config for trigger
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  instances   WorkflowInstance[]
+}
+
+model WorkflowInstance {
+  id          String    @id @default(cuid())
+  workflowId  String
+  entityId    String    // the entity this workflow is about (diagnostic, strategy, etc.)
+  entityType  String    // diagnostic | strategy | lead | task
+  status      String    @default("pending") // pending | in_progress | completed | rejected | cancelled
+  currentStep Int       @default(0)
+  initiatorId String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workflow    Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  actions     WorkflowAction[]
+}
+
+model WorkflowAction {
+  id          String    @id @default(cuid())
+  instanceId  String
+  userId      String?
+  stepIndex   Int
+  action      String    // approve | reject | review | comment | escalate
+  comment     String?
+  createdAt   DateTime  @default(now())
+
+  instance    WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// FINANCIAL LAYER - Professional Finance Module
+// ============================================================
+
+model Invoice {
+  id            String    @id @default(cuid())
+  companyId     String
+  creatorId     String
+  invoiceNumber String    @unique
+  type          String    @default("sales") // sales | purchase | proforma
+  status        String    @default("draft") // draft | sent | paid | partially_paid | cancelled | overdue
+  issueDate     DateTime
+  dueDate       DateTime
+  items         String    // JSON array of line items
+  subtotal      Float     @default(0)
+  taxRate       Float     @default(0)
+  taxAmount     Float     @default(0)
+  discount      Float     @default(0)
+  total         Float     @default(0)
+  paidAmount    Float     @default(0)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator       User      @relation("InvoiceCreator", fields: [creatorId], references: [id])
+  payments      Payment[]
+}
+
+model Payment {
+  id          String    @id @default(cuid())
+  invoiceId   String
+  amount      Float
+  method      String    @default("cash") // cash | bank_transfer | card | online | cheque
+  reference   String?
+  paidAt      DateTime  @default(now())
+  notes       String?
+
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  companyId   String
+  creatorId   String
+  category    String    // salary | rent | marketing | operations | software | travel | other
+  amount      Float
+  description String?
+  date        DateTime
+  receipt     String?   // file path or URL
+  status      String    @default("pending") // pending | approved | rejected
+  approvedBy  String?
+  createdAt   DateTime  @default(now())
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator     User      @relation("ExpenseCreator", fields: [creatorId], references: [id])
+}
+
+model RevenueRecord {
+  id          String    @id @default(cuid())
+  companyId   String
+  creatorId   String
+  source      String    // consulting | subscription | diagnostic | training | other
+  amount      Float
+  description String?
+  date        DateTime
+  createdAt   DateTime  @default(now())
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  creator     User      @relation("RevenueCreator", fields: [creatorId], references: [id])
+}
+
+model Budget {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  period      String    // monthly | quarterly | yearly
+  startDate   DateTime
+  endDate     DateTime
+  categories  String    // JSON: { category: budgetAmount }
+  totalBudget Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// NOTIFICATION LAYER
+// ============================================================
+
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    // info | warning | success | error | reminder
+  category    String    // system | strategy | crm | financial | workflow | ai
+  title       String
+  message     String
+  link        String?   // navigation link
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// AI AGENT LAYER
+// ============================================================
+
+model AIAgentSession {
+  id          String    @id @default(cuid())
+  userId      String
+  agentType   String    // strategist | financial | market | reporter | execution | investor | benchmark | predictor
+  title       String    @default("گفتگوی جدید")
+  context     String?   // JSON context data
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  messages    AIAgentMessage[]
+}
+
+model AIAgentMessage {
+  id          String    @id @default(cuid())
+  sessionId   String
+  role        String    // user | assistant | system
+  content     String
+  metadata    String?   // JSON: agent-specific metadata (charts, suggestions, etc.)
+  createdAt   DateTime  @default(now())
+
+  session     AIAgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// BI & ANALYTICS LAYER
+// ============================================================
+
+model KPIRecord {
+  id          String    @id @default(cuid())
+  companyId   String
+  metric      String    // conversion_rate | cac | ltv | churn_rate | revenue_growth | nps | strategy_completion
+  value       Float
+  period      String    // daily | weekly | monthly | quarterly | yearly
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime  @default(now())
+}
+
+// ============================================================
+// EXISTING MODELS (ENHANCED)
+// ============================================================
+
+model Report {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String
+  type        String    // strategic | growth | risk | market | investor | financial | executive
+  content     String    // JSON string with report data
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Benchmark {
+  id          String    @id @default(cuid())
+  companyId   String
+  industry    String
+  metric      String
+  value       Float
+  industryAvg Float?
+  topPerformer Float?
+  year        Int
+  createdAt   DateTime  @default(now())
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeArticle {
+  id          String    @id @default(cuid())
+  title       String
+  category    String    // framework | case_study | guide | playbook | video | template
+  content     String    // markdown content
+  tags        String?   // comma separated
+  author      String?
+  readTime    Int?      // minutes
+  published   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ChatSession {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String    @default("New Conversation")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    ChatMessage[]
+}
+
+model ChatMessage {
+  id          String    @id @default(cuid())
+  sessionId   String
+  userId      String?
+  role        String    // user | assistant
+  content     String
+  createdAt   DateTime  @default(now())
+
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [userId], references: [id])
+}

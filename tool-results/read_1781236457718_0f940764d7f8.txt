@@ -1,0 +1,729 @@
+     1→import crypto from 'crypto';
+     2→import { db } from './db';
+     3→
+     4→const SECRET_KEY = process.env.AUTH_SECRET || 'bcgsp-secret-key-change-in-production';
+     5→
+     6→async function hashPassword(password: string): Promise<string> {
+     7→  const salt = crypto.randomBytes(16).toString('hex');
+     8→  const derivedKey = crypto.scryptSync(password, salt, 64);
+     9→  return `${salt}:${derivedKey.toString('hex')}`;
+    10→}
+    11→
+    12→export async function seed() {
+    13→  console.log('🌱 Seeding BCGSP database...');
+    14→
+    15→  try {
+    16→    // 1. Create admin user
+    17→    console.log('Creating admin user...');
+    18→    const adminPasswordHash = await hashPassword('admin123');
+    19→    const admin = await db.user.upsert({
+    20→      where: { email: 'admin@bcgsp.com' },
+    21→      update: {},
+    22→      create: {
+    23→        email: 'admin@bcgsp.com',
+    24→        name: 'BCGSP Admin',
+    25→        passwordHash: adminPasswordHash,
+    26→        role: 'admin',
+    27→      },
+    28→    });
+    29→    console.log(`✅ Admin user created: ${admin.email}`);
+    30→
+    31→    // 2. Create sample SME user
+    32→    console.log('Creating sample SME user...');
+    33→    const smePasswordHash = await hashPassword('sme123');
+    34→    const smeUser = await db.user.upsert({
+    35→      where: { email: 'sme@example.com' },
+    36→      update: {},
+    37→      create: {
+    38→        email: 'sme@example.com',
+    39→        name: 'Sarah Chen',
+    40→        passwordHash: smePasswordHash,
+    41→        role: 'sme',
+    42→      },
+    43→    });
+    44→    console.log(`✅ SME user created: ${smeUser.email}`);
+    45→
+    46→    // 3. Create sample company for SME user
+    47→    console.log('Creating sample company...');
+    48→    const company = await db.company.upsert({
+    49→      where: { userId: smeUser.id },
+    50→      update: {},
+    51→      create: {
+    52→        userId: smeUser.id,
+    53→        name: 'TechVenture Solutions',
+    54→        industry: 'Technology',
+    55→        subIndustry: 'SaaS',
+    56→        businessModel: 'B2B SaaS',
+    57→        stage: 'Growth',
+    58→        revenue: '$1M-$5M',
+    59→        employees: '11-50',
+    60→        region: 'North America',
+    61→        country: 'United States',
+    62→        foundedYear: 2019,
+    63→        website: 'https://techventure.example.com',
+    64→        description: 'A B2B SaaS company providing data analytics solutions for mid-market enterprises.',
+    65→        targetCustomers: 'Mid-market enterprises with 100-1000 employees seeking data analytics solutions',
+    66→        products: 'DataViz Pro (analytics platform), InsightHub (reporting tool), DataSync (integration service)',
+    67→      },
+    68→    });
+    69→    console.log(`✅ Company created: ${company.name}`);
+    70→
+    71→    // 4. Create sample diagnostic with answers
+    72→    console.log('Creating sample diagnostic...');
+    73→    const diagnostic = await db.diagnostic.create({
+    74→      data: {
+    75→        userId: smeUser.id,
+    76→        companyId: company.id,
+    77→        status: 'completed',
+    78→        businessModel: 62,
+    79→        market: 48,
+    80→        product: 55,
+    81→        customers: 44,
+    82→        marketing: 38,
+    83→        sales: 52,
+    84→        operations: 58,
+    85→        financial: 42,
+    86→        team: 66,
+    87→        growth: 35,
+    88→        overallScore: 50.9,
+    89→        riskScore: 53.4,
+    90→        growthPotential: 46.95,
+    91→        investmentReady: 48.39,
+    92→      },
+    93→    });
+    94→    console.log(`✅ Diagnostic created: ${diagnostic.id}`);
+    95→
+    96→    // 5. Create diagnostic answers (10 questions per dimension)
+    97→    console.log('Creating diagnostic answers...');
+    98→    const dimensions = [
+    99→      'businessModel', 'market', 'product', 'customers', 'marketing',
+   100→      'sales', 'operations', 'financial', 'team', 'growth',
+   101→    ];
+   102→
+   103→    const questionTexts: Record<string, string[]> = {
+   104→      businessModel: [
+   105→        'How clearly defined is your value proposition?',
+   106→        'How diversified are your revenue streams?',
+   107→        'How scalable is your current business model?',
+   108→        'How well does your pricing capture value?',
+   109→        'How strong are your competitive moats?',
+   110→        'How sustainable is your cost structure?',
+   111→        'How aligned is your model with market needs?',
+   112→        'How effective is your distribution strategy?',
+   113→        'How adaptable is your model to market changes?',
+   114→        'How well does your model support recurring revenue?',
+   115→      ],
+   116→      market: [
+   117→        'How large is your addressable market?',
+   118→        'How fast is your market growing?',
+   119→        'How well do you understand market trends?',
+   120→        'How strong is your market positioning?',
+   121→        'How effective is your market research?',
+   122→        'How well do you track competitor activities?',
+   123→        'How clear is your market entry strategy?',
+   124→        'How diversified is your market exposure?',
+   125→        'How strong are your market partnerships?',
+   126→        'How well do you respond to market shifts?',
+   127→      ],
+   128→      product: [
+   129→        'How strong is your product-market fit?',
+   130→        'How differentiated is your product?',
+   131→        'How satisfied are your customers with the product?',
+   132→        'How robust is your product roadmap?',
+   133→        'How effective is your product development process?',
+   134→        'How well does your product solve customer pain points?',
+   135→        'How innovative is your product compared to alternatives?',
+   136→        'How reliable is your product quality?',
+   137→        'How well does your product integrate with customer workflows?',
+   138→        'How effective is your product feedback loop?',
+   139→      ],
+   140→      customers: [
+   141→        'How well do you understand your customer segments?',
+   142→        'How effective is your customer acquisition?',
+   143→        'How strong is your customer retention?',
+   144→        'How satisfied are your customers (NPS)?',
+   145→        'How effective is your customer success program?',
+   146→        'How well do you track customer health?',
+   147→        'How strong is your customer feedback system?',
+   148→        'How well do you handle customer complaints?',
+   149→        'How effective is your upselling/cross-selling?',
+   150→        'How strong is your customer advocacy?',
+   151→      ],
+   152→      marketing: [
+   153→        'How effective is your brand awareness strategy?',
+   154→        'How well do you measure marketing ROI?',
+   155→        'How strong is your content marketing?',
+   156→        'How effective are your digital marketing channels?',
+   157→        'How well do you target your ideal customers?',
+   158→        'How strong is your social media presence?',
+   159→        'How effective is your marketing automation?',
+   160→        'How well does marketing align with sales?',
+   161→        'How strong is your thought leadership?',
+   162→        'How effective is your event marketing?',
+   163→      ],
+   164→      sales: [
+   165→        'How effective is your sales process?',
+   166→        'How strong is your sales team?',
+   167→        'How well does your sales funnel convert?',
+   168→        'How effective is your CRM usage?',
+   169→        'How strong are your sales metrics and tracking?',
+   170→        'How well do you qualify leads?',
+   171→        'How effective is your sales enablement?',
+   172→        'How strong is your pipeline management?',
+   173→        'How well do you handle objections?',
+   174→        'How effective is your closing process?',
+   175→      ],
+   176→      operations: [
+   177→        'How efficient are your core processes?',
+   178→        'How well do you manage quality?',
+   179→        'How effective is your supply chain?',
+   180→        'How strong is your operational technology?',
+   181→        'How well do you manage capacity?',
+   182→        'How effective is your project management?',
+   183→        'How well do you handle compliance?',
+   184→        'How strong is your vendor management?',
+   185→        'How effective are your operational metrics?',
+   186→        'How well do you manage operational risk?',
+   187→      ],
+   188→      financial: [
+   189→        'How healthy is your cash flow?',
+   190→        'How strong are your profit margins?',
+   191→        'How effective is your financial planning?',
+   192→        'How well do you manage working capital?',
+   193→        'How strong is your financial reporting?',
+   194→        'How effective is your budget management?',
+   195→        'How well do you manage financial risk?',
+   196→        'How strong is your unit economics?',
+   197→        'How effective is your capital allocation?',
+   198→        'How well prepared are you for fundraising?',
+   199→      ],
+   200→      team: [
+   201→        'How strong is your leadership team?',
+   202→        'How effective is your hiring process?',
+   203→        'How well do you retain top talent?',
+   204→        'How strong is your team culture?',
+   205→        'How effective is your performance management?',
+   206→        'How well do you develop employee skills?',
+   207→        'How strong is your organizational structure?',
+   208→        'How effective is your internal communication?',
+   209→        'How well do you manage remote/hybrid work?',
+   210→        'How strong is your succession planning?',
+   211→      ],
+   212→      growth: [
+   213→        'How strong is your growth strategy?',
+   214→        'How effective are your growth experiments?',
+   215→        'How well do you leverage viral growth?',
+   216→        'How strong is your referral program?',
+   217→        'How effective is your expansion strategy?',
+   218→        'How well do you track growth metrics?',
+   219→        'How strong is your product-led growth?',
+   220→        'How effective is your partnership-driven growth?',
+   221→        'How well do you optimize conversion rates?',
+   222→        'How strong is your international growth capability?',
+   223→      ],
+   224→    };
+   225→
+   226→    // Sample answer scores for each dimension
+   227→    const sampleScores: Record<string, number[]> = {
+   228→      businessModel: [4, 2, 3, 3, 2, 3, 4, 3, 3, 3],   // avg: 3.0 → 60%
+   229→      market: [3, 2, 3, 2, 3, 2, 3, 2, 2, 3],            // avg: 2.5 → 50%
+   230→      product: [4, 3, 3, 3, 2, 3, 3, 3, 3, 3],            // avg: 3.0 → 60%
+   231→      customers: [3, 2, 2, 3, 2, 2, 3, 2, 2, 2],          // avg: 2.3 → 46%
+   232→      marketing: [2, 2, 2, 3, 2, 2, 2, 2, 2, 2],          // avg: 2.1 → 42%
+   233→      sales: [3, 3, 3, 2, 3, 3, 3, 2, 3, 2],              // avg: 2.7 → 54%
+   234→      operations: [3, 3, 3, 3, 3, 3, 2, 3, 3, 3],         // avg: 2.9 → 58%
+   235→      financial: [2, 2, 2, 3, 2, 2, 2, 3, 2, 2],          // avg: 2.2 → 44%
+   236→      team: [4, 3, 4, 3, 3, 3, 3, 3, 3, 4],               // avg: 3.3 → 66%
+   237→      growth: [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],             // avg: 2.0 → 40%
+   238→    };
+   239→
+   240→    const answersData = [];
+   241→    for (const dimension of dimensions) {
+   242→      const scores = sampleScores[dimension];
+   243→      const questions = questionTexts[dimension];
+   244→      for (let i = 0; i < 10; i++) {
+   245→        answersData.push({
+   246→          diagnosticId: diagnostic.id,
+   247→          dimension,
+   248→          questionIndex: i,
+   249→          questionText: questions[i],
+   250→          answer: scores[i],
+   251→        });
+   252→      }
+   253→    }
+   254→
+   255→    await db.diagnosticAnswer.createMany({ data: answersData });
+   256→    console.log(`✅ Created ${answersData.length} diagnostic answers`);
+   257→
+   258→    // 6. Create sample knowledge articles
+   259→    console.log('Creating knowledge articles...');
+   260→    const knowledgeArticles = [
+   261→      {
+   262→        title: 'Business Model Canvas: A Complete Guide for SMEs',
+   263→        category: 'framework',
+   264→        content: `# Business Model Canvas for SMEs
+   265→
+   266→## Overview
+   267→The Business Model Canvas (BMC) is a strategic management template used for developing new business models and documenting existing ones. It provides a visual chart with elements describing a firm's value proposition, infrastructure, customers, and finances.
+   268→
+   269→## The 9 Building Blocks
+   270→
+   271→### 1. Customer Segments
+   272→Define the different groups of people or organizations your enterprise aims to reach and serve.
+   273→
+   274→### 2. Value Propositions
+   275→Describe the bundle of products and services that create value for a specific Customer Segment.
+   276→
+   277→### 3. Channels
+   278→Outline how you communicate with and reach your Customer Segments to deliver your Value Proposition.
+   279→
+   280→### 4. Customer Relationships
+   281→Describe the types of relationships you establish with specific Customer Segments.
+   282→
+   283→### 5. Revenue Streams
+   284→Represent the cash a company generates from each Customer Segment.
+   285→
+   286→### 6. Key Resources
+   287→Describe the most important assets required to make a business model work.
+   288→
+   289→### 7. Key Activities
+   290→Describe the most important things a company must do to make its business model work.
+   291→
+   292→### 8. Key Partnerships
+   293→Describe the network of suppliers and partners that make the business model work.
+   294→
+   295→### 9. Cost Structure
+   296→Describe all costs incurred to operate a business model.
+   297→
+   298→## How to Use
+   299→1. Print or draw the canvas on a large surface
+   300→2. Start with Customer Segments and Value Proposition
+   301→3. Work through each building block systematically
+   302→4. Iterate and refine based on market feedback
+   303→
+   304→## Common Pitfalls
+   305→- Focusing too much on the product, not enough on customer needs
+   306→- Ignoring competitive alternatives
+   307→- Underestimating the cost of customer acquisition
+   308→- Not validating assumptions with real customers`,
+   309→        tags: 'business model, strategy, framework, canvas, SME',
+   310→        author: 'BCGSP Strategy Team',
+   311→        readTime: 12,
+   312→        published: true,
+   313→      },
+   314→      {
+   315→        title: 'Porter\'s Five Forces: Analyzing Industry Competition',
+   316→        category: 'framework',
+   317→        content: `# Porter's Five Forces Analysis
+   318→
+   319→## Overview
+   320→Porter's Five Forces is a framework for analyzing competition of a business. It draws from industrial organization economics to derive five forces that determine the competitive intensity and attractiveness of a market.
+   321→
+   322→## The Five Forces
+   323→
+   324→### 1. Threat of New Entrants
+   325→- Economies of scale
+   326→- Brand loyalty
+   327→- Capital requirements
+   328→- Access to distribution
+   329→- Government policies
+   330→
+   331→### 2. Bargaining Power of Suppliers
+   332→- Number of suppliers
+   333→- Uniqueness of input
+   334→- Switching costs
+   335→- Threat of forward integration
+   336→
+   337→### 3. Bargaining Power of Buyers
+   338→- Number of buyers
+   339→- Switching costs
+   340→- Price sensitivity
+   341→- Threat of backward integration
+   342→
+   343→### 4. Threat of Substitutes
+   344→- Availability of substitutes
+   345→- Price-performance tradeoff
+   346→- Switching costs
+   347→
+   348→### 5. Competitive Rivalry
+   349→- Number of competitors
+   350→- Industry growth rate
+   351→- Fixed costs
+   352→- Exit barriers
+   353→
+   354→## Application for SMEs
+   355→- Use to assess market attractiveness before entry
+   356→- Identify which forces are most critical for your business
+   357→- Develop strategies to position against strong forces
+   358→- Regularly reassess as market conditions change`,
+   359→        tags: 'competition, market analysis, strategy, Porter',
+   360→        author: 'BCGSP Strategy Team',
+   361→        readTime: 10,
+   362→        published: true,
+   363→      },
+   364→      {
+   365→        title: 'How TechStartup Grew 300% Using Data-Driven Strategy',
+   366→        category: 'case_study',
+   367→        content: `# Case Study: TechStartup's 300% Growth Journey
+   368→
+   369→## Background
+   370→TechStartup, a B2B SaaS company in the analytics space, was struggling with growth stagnation. After completing a comprehensive diagnostic assessment, they identified critical gaps in their marketing and sales dimensions.
+   371→
+   372→## The Challenge
+   373→- Overall diagnostic score: 42/100
+   374→- Marketing score: 28/100 (Critical)
+   375→- Sales score: 35/100 (Critical)
+   376→- Customer score: 48/100 (Weak)
+   377→
+   378→## The Strategy
+   379→
+   380→### Phase 1: Foundation (0-30 days)
+   381→- Conducted deep customer research
+   382→- Rebuilt ideal customer profiles
+   383→- Implemented marketing analytics
+   384→
+   385→### Phase 2: Growth (30-90 days)
+   386→- Launched targeted content marketing
+   387→- Implemented account-based sales
+   388→- Built strategic partnerships
+   389→
+   390→### Phase 3: Scale (90-180 days)
+   391→- Scaled successful channels
+   392→- Built automated marketing engine
+   393→- Expanded sales team strategically
+   394→
+   395→## Results
+   396→- 300% revenue growth in 12 months
+   397→- Marketing score improved from 28 to 72
+   398→- Sales score improved from 35 to 68
+   399→- Customer retention increased from 72% to 91%
+   400→
+   401→## Key Lessons
+   402→1. Data-driven decisions outperform intuition
+   403→2. Focus on one weak dimension at a time
+   404→3. Customer feedback is the most valuable data
+   405→4. Invest in systems before scaling`,
+   406→        tags: 'case study, growth, SaaS, data-driven, marketing',
+   407→        author: 'BCGSP Research Team',
+   408→        readTime: 8,
+   409→        published: true,
+   410→      },
+   411→      {
+   412→        title: 'Financial Health Checklist for SMEs',
+   413→        category: 'guide',
+   414→        content: `# Financial Health Checklist for SMEs
+   415→
+   416→## Monthly Checks
+   417→- [ ] Cash flow statement reviewed
+   418→- [ ] Revenue vs. budget comparison
+   419→- [ ] Accounts receivable aging reviewed
+   420→- [ ] Accounts payable schedule confirmed
+   421→- [ ] Burn rate calculated and tracked
+   422→
+   423→## Quarterly Reviews
+   424→- [ ] P&L statement analyzed
+   425→- [ ] Balance sheet reviewed
+   426→- [ ] Unit economics (CAC, LTV, payback period)
+   427→- [ ] Revenue concentration analysis
+   428→- [ ] Working capital optimization
+   429→
+   430→## Annual Assessments
+   431→- [ ] Financial audit completed
+   432→- [ ] Tax strategy optimized
+   433→- [ ] Capital structure reviewed
+   434→- [ ] Insurance coverage assessed
+   435→- [ ] Investment readiness evaluation
+   436→
+   437→## Key Financial Ratios to Track
+   438→
+   439→### Liquidity
+   440→- Current Ratio: Current Assets / Current Liabilities (Target: >1.5)
+   441→- Quick Ratio: (Cash + Receivables) / Current Liabilities (Target: >1.0)
+   442→
+   443→### Profitability
+   444→- Gross Margin: (Revenue - COGS) / Revenue (Target: >60% for SaaS)
+   445→- Net Margin: Net Income / Revenue (Target: >15%)
+   446→
+   447→### Efficiency
+   448→- CAC Payback: CAC / (Monthly Revenue per Customer × Gross Margin)
+   449→- LTV:CAC Ratio: Customer LTV / CAC (Target: >3:1)
+   450→
+   451→## Warning Signs
+   452→- Declining gross margins
+   453→- Increasing accounts receivable days
+   454→- Negative operating cash flow
+   455→- High customer concentration
+   456→- Rapidly increasing burn rate`,
+   457→        tags: 'finance, checklist, metrics, health, SME',
+   458→        author: 'BCGSP Finance Team',
+   459→        readTime: 15,
+   460→        published: true,
+   461→      },
+   462→      {
+   463→        title: 'Growth Strategy Playbook: From Product-Market Fit to Scale',
+   464→        category: 'playbook',
+   465→        content: `# Growth Strategy Playbook
+   466→
+   467→## Stage 1: Find Product-Market Fit
+   468→- Talk to 100+ potential customers
+   469→- Measure Sean Ellis test (>40% "very disappointed")
+   470→- Iterate rapidly based on feedback
+   471→- Focus on one customer segment
+   472→
+   473→## Stage 2: Build Growth Engine
+   474→- Identify your primary growth channel
+   475→- Optimize conversion funnel step by step
+   476→- Implement measurement infrastructure
+   477→- Test secondary growth channels
+   478→
+   479→## Stage 3: Scale What Works
+   480→- Increase investment in top-performing channels
+   481→- Build growth team with specialized roles
+   482→- Implement growth experiments framework
+   483→- Develop viral and referral mechanics
+   484→
+   485→## Stage 4: Optimize and Diversify
+   486→- Reduce dependency on single channels
+   487→- Optimize unit economics at scale
+   488→- Explore new market segments
+   489→- Build brand as growth driver
+   490→
+   491→## Growth Metrics Framework
+   492→
+   493→### Acquisition
+   494→- Traffic, signups, activation rate
+   495→- Channel-specific conversion rates
+   496→- Cost per acquisition by channel
+   497→
+   498→### Activation
+   499→- Time to value
+   500→- Onboarding completion rate
+   501→- Feature adoption rates
+   502→
+   503→### Retention
+   504→- Cohort retention curves
+   505→- Churn rate (logo and revenue)
+   506→- Net revenue retention
+   507→
+   508→### Revenue
+   509→- ARPU/ARPA
+   510→- Expansion revenue
+   511→- LTV by segment
+   512→
+   513→### Referral
+   514→- Net Promoter Score
+   515→- Referral rate
+   516→- Viral coefficient`,
+   517→        tags: 'growth, playbook, strategy, scale, product-market fit',
+   518→        author: 'BCGSP Growth Team',
+   519→        readTime: 20,
+   520→        published: true,
+   521→      },
+   522→      {
+   523→        title: 'Investment Readiness: Preparing Your SME for External Funding',
+   524→        category: 'guide',
+   525→        content: `# Investment Readiness Guide
+   526→
+   527→## What Investors Look For
+   528→
+   529→### 1. Strong Team (30% weight)
+   530→- Complementary skill sets
+   531→- Track record of execution
+   532→- Clear roles and responsibilities
+   533→- Advisor network
+   534→
+   535→### 2. Market Opportunity (25% weight)
+   536→- Large addressable market (TAM/SAM/SOM)
+   537→- Clear market timing
+   538→- Defensible market position
+   539→- Growth trajectory
+   540→
+   541→### 3. Financial Health (25% weight)
+   542→- Clean financial statements
+   543→- Strong unit economics
+   544→- Predictable revenue model
+   545→- Capital efficiency
+   546→
+   547→### 4. Growth Potential (20% weight)
+   548→- Scalable business model
+   549→- Clear growth levers
+   550→- Product-market fit evidence
+   551→- Expansion opportunities
+   552→
+   553→## Preparation Checklist
+   554→
+   555→### Documents to Prepare
+   556→- [ ] Pitch deck (10-15 slides)
+   557→- [ ] Financial model (3-5 year projections)
+   558→- [ ] Cap table
+   559→- [ ] Data room with legal documents
+   560→- [ ] Customer case studies
+   561→- [ ] Competitive analysis
+   562→
+   563→### Metrics to Know Cold
+   564→- Monthly/annual revenue and growth rate
+   565→- Customer acquisition cost (CAC)
+   566→- Lifetime value (LTV)
+   567→- LTV:CAC ratio
+   568→- Payback period
+   569→- Churn rate
+   570→- Burn rate and runway
+   571→- Gross margin
+   572→
+   573→### Common Red Flags
+   574→- Unclear business model
+   575→- High customer concentration
+   576→- Founder disputes
+   577→- Inconsistent financial data
+   578→- No clear use of funds
+   579→- Unrealistic valuations
+   580→- Lack of market validation`,
+   581→        tags: 'investment, funding, readiness, investor, preparation',
+   582→        author: 'BCGSP Investment Team',
+   583→        readTime: 18,
+   584→        published: true,
+   585→      },
+   586→    ];
+   587→
+   588→    for (const article of knowledgeArticles) {
+   589→      await db.knowledgeArticle.create({ data: article });
+   590→    }
+   591→    console.log(`✅ Created ${knowledgeArticles.length} knowledge articles`);
+   592→
+   593→    // 7. Create industry benchmarks
+   594→    console.log('Creating industry benchmarks...');
+   595→    const industries = ['Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing'];
+   596→    const metrics = [
+   597→      'businessModel', 'market', 'product', 'customers', 'marketing',
+   598→      'sales', 'operations', 'financial', 'team', 'growth',
+   599→      'overallScore', 'riskScore', 'growthPotential', 'investmentReady',
+   600→    ];
+   601→
+   602→    const benchmarkValues: Record<string, Record<string, { value: number; industryAvg: number; topPerformer: number }>> = {
+   603→      Technology: {
+   604→        businessModel: { value: 62, industryAvg: 58, topPerformer: 85 },
+   605→        market: { value: 55, industryAvg: 52, topPerformer: 82 },
+   606→        product: { value: 58, industryAvg: 55, topPerformer: 88 },
+   607→        customers: { value: 50, industryAvg: 48, topPerformer: 80 },
+   608→        marketing: { value: 48, industryAvg: 45, topPerformer: 78 },
+   609→        sales: { value: 52, industryAvg: 50, topPerformer: 82 },
+   610→        operations: { value: 60, industryAvg: 56, topPerformer: 85 },
+   611→        financial: { value: 45, industryAvg: 42, topPerformer: 80 },
+   612→        team: { value: 65, industryAvg: 60, topPerformer: 88 },
+   613→        growth: { value: 50, industryAvg: 48, topPerformer: 85 },
+   614→        overallScore: { value: 54.5, industryAvg: 51.4, topPerformer: 83.3 },
+   615→        riskScore: { value: 48, industryAvg: 52, topPerformer: 25 },
+   616→        growthPotential: { value: 52, industryAvg: 50, topPerformer: 82 },
+   617→        investmentReady: { value: 48, industryAvg: 45, topPerformer: 80 },
+   618→      },
+   619→      Healthcare: {
+   620→        businessModel: { value: 55, industryAvg: 52, topPerformer: 78 },
+   621→        market: { value: 60, industryAvg: 58, topPerformer: 82 },
+   622→        product: { value: 62, industryAvg: 60, topPerformer: 85 },
+   623→        customers: { value: 58, industryAvg: 55, topPerformer: 80 },
+   624→        marketing: { value: 40, industryAvg: 38, topPerformer: 70 },
+   625→        sales: { value: 45, industryAvg: 42, topPerformer: 75 },
+   626→        operations: { value: 65, industryAvg: 62, topPerformer: 88 },
+   627→        financial: { value: 55, industryAvg: 52, topPerformer: 82 },
+   628→        team: { value: 60, industryAvg: 58, topPerformer: 85 },
+   629→        growth: { value: 42, industryAvg: 40, topPerformer: 72 },
+   630→        overallScore: { value: 54.2, industryAvg: 51.7, topPerformer: 79.7 },
+   631→        riskScore: { value: 42, industryAvg: 45, topPerformer: 22 },
+   632→        growthPotential: { value: 48, industryAvg: 46, topPerformer: 76 },
+   633→        investmentReady: { value: 50, industryAvg: 48, topPerformer: 78 },
+   634→      },
+   635→      Finance: {
+   636→        businessModel: { value: 58, industryAvg: 55, topPerformer: 82 },
+   637→        market: { value: 52, industryAvg: 50, topPerformer: 80 },
+   638→        product: { value: 55, industryAvg: 52, topPerformer: 78 },
+   639→        customers: { value: 52, industryAvg: 50, topPerformer: 78 },
+   640→        marketing: { value: 42, industryAvg: 40, topPerformer: 72 },
+   641→        sales: { value: 48, industryAvg: 45, topPerformer: 78 },
+   642→        operations: { value: 68, industryAvg: 65, topPerformer: 90 },
+   643→        financial: { value: 62, industryAvg: 60, topPerformer: 88 },
+   644→        team: { value: 58, industryAvg: 55, topPerformer: 82 },
+   645→        growth: { value: 40, industryAvg: 38, topPerformer: 70 },
+   646→        overallScore: { value: 53.5, industryAvg: 51.0, topPerformer: 79.8 },
+   647→        riskScore: { value: 45, industryAvg: 48, topPerformer: 20 },
+   648→        growthPotential: { value: 46, industryAvg: 44, topPerformer: 74 },
+   649→        investmentReady: { value: 52, industryAvg: 50, topPerformer: 80 },
+   650→      },
+   651→      Retail: {
+   652→        businessModel: { value: 50, industryAvg: 48, topPerformer: 75 },
+   653→        market: { value: 55, industryAvg: 52, topPerformer: 80 },
+   654→        product: { value: 52, industryAvg: 50, topPerformer: 78 },
+   655→        customers: { value: 55, industryAvg: 52, topPerformer: 82 },
+   656→        marketing: { value: 55, industryAvg: 52, topPerformer: 80 },
+   657→        sales: { value: 58, industryAvg: 55, topPerformer: 82 },
+   658→        operations: { value: 60, industryAvg: 58, topPerformer: 85 },
+   659→        financial: { value: 48, industryAvg: 45, topPerformer: 78 },
+   660→        team: { value: 50, industryAvg: 48, topPerformer: 75 },
+   661→        growth: { value: 45, industryAvg: 42, topPerformer: 72 },
+   662→        overallScore: { value: 52.8, industryAvg: 50.2, topPerformer: 78.7 },
+   663→        riskScore: { value: 50, industryAvg: 52, topPerformer: 28 },
+   664→        growthPotential: { value: 50, industryAvg: 48, topPerformer: 76 },
+   665→        investmentReady: { value: 46, industryAvg: 44, topPerformer: 75 },
+   666→      },
+   667→      Manufacturing: {
+   668→        businessModel: { value: 48, industryAvg: 45, topPerformer: 72 },
+   669→        market: { value: 50, industryAvg: 48, topPerformer: 75 },
+   670→        product: { value: 58, industryAvg: 55, topPerformer: 82 },
+   671→        customers: { value: 48, industryAvg: 45, topPerformer: 72 },
+   672→        marketing: { value: 38, industryAvg: 35, topPerformer: 68 },
+   673→        sales: { value: 45, industryAvg: 42, topPerformer: 72 },
+   674→        operations: { value: 65, industryAvg: 62, topPerformer: 88 },
+   675→        financial: { value: 52, industryAvg: 50, topPerformer: 80 },
+   676→        team: { value: 55, industryAvg: 52, topPerformer: 78 },
+   677→        growth: { value: 38, industryAvg: 35, topPerformer: 68 },
+   678→        overallScore: { value: 49.7, industryAvg: 46.9, topPerformer: 75.5 },
+   679→        riskScore: { value: 52, industryAvg: 55, topPerformer: 30 },
+   680→        growthPotential: { value: 42, industryAvg: 40, topPerformer: 70 },
+   681→        investmentReady: { value: 44, industryAvg: 42, topPerformer: 72 },
+   682→      },
+   683→    };
+   684→
+   685→    const benchmarkData = [];
+   686→    for (const industry of industries) {
+   687→      const industryMetrics = benchmarkValues[industry];
+   688→      for (const metric of metrics) {
+   689→        const values = industryMetrics[metric];
+   690→        benchmarkData.push({
+   691→          companyId: company.id,
+   692→          industry,
+   693→          metric,
+   694→          value: values.value,
+   695→          industryAvg: values.industryAvg,
+   696→          topPerformer: values.topPerformer,
+   697→          year: 2024,
+   698→        });
+   699→      }
+   700→    }
+   701→
+   702→    await db.benchmark.createMany({ data: benchmarkData });
+   703→    console.log(`✅ Created ${benchmarkData.length} benchmark entries`);
+   704→
+   705→    console.log('\n🎉 Seeding completed successfully!');
+   706→    console.log('\n📋 Summary:');
+   707→    console.log(`  - Admin user: admin@bcgsp.com / admin123`);
+   708→    console.log(`  - Sample SME user: sme@example.com / sme123`);
+   709→    console.log(`  - Sample company: ${company.name}`);
+   710→    console.log(`  - Sample diagnostic with ${answersData.length} answers`);
+   711→    console.log(`  - ${knowledgeArticles.length} knowledge articles`);
+   712→    console.log(`  - ${benchmarkData.length} benchmark entries`);
+   713→  } catch (error) {
+   714→    console.error('❌ Seeding error:', error);
+   715→    throw error;
+   716→  }
+   717→}
+   718→
+   719→// Run seed if called directly
+   720→seed()
+   721→  .then(async () => {
+   722→    await db.$disconnect();
+   723→  })
+   724→  .catch(async (e) => {
+   725→    console.error(e);
+   726→    await db.$disconnect();
+   727→    process.exit(1);
+   728→  });
+   729→
